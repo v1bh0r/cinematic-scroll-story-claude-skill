@@ -65,8 +65,16 @@ The picture is a metaphor, and the copy and callouts name the real things.
 
 Write one row per beat before any code:
 
-| # | Shot (where, what's in frame, where the text sits) | Event on its own clock | Eyebrow · headline · ≤2 sentences | Callouts | Feeling |
-|---|---|---|---|---|---|
+| # | Shot (where, what's in frame, where the text sits) | Event on its own clock | Eyebrow · headline · ≤2 sentences | Callouts | Feeling | Hero · what the shot cannot see | Cost |
+|---|---|---|---|---|---|---|---|
+
+The last two columns are the shot's budget contract, decided now rather than discovered later:
+- **Hero · what the shot cannot see.** Name the one thing the eye must land on; quality gives way
+  everywhere else first. Then list the groups of the world this shot cannot see (the city from inside
+  the hall, the hall from the skyline); they will not be traced at all. Composition is the cheapest
+  optimisation there is: a building in front, a turn, an interior, fog.
+- **Cost.** `light` / `normal` / `heavy`, judged by how much is traced per pixel and how much of the frame
+  it covers. A run of heavy shots in a row is a design problem; put a light shot between them.
 
 Rules for the copy:
 - One claim per screen, and about 25–40 words per beat.

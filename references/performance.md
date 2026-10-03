@@ -16,6 +16,13 @@ Three decisions are made per frame, outside the scene, so a new world gets them 
 | **How big** the scene is | The scene is drawn into an off-screen texture at a fraction (`scale`) of the canvas and stretched up with a light sharpen. `scale` is chosen so the frame costs about its budget: `moveMs` 4 / `eventMs` 7 / `restMs` 10 | Small while moving (motion hides it), large at rest (where the eye looks). A fixed canvas plus a smoothly varying scale never pops: shrinking is quick, growing is slow, like a rack focus |
 | **How dear** a pixel is | Measured, not assumed: a synchronous slope between two small sizes, once at start and again the first time the camera rests on each shot (shots differ in cost). A display-side check (`overrun`) raises the estimate if frames come in under ~40 fps | Open loop, see "What was tried" below for why not a closed one |
 
+Two more decisions sit beside these three:
+
+| Decision | Rule | Why |
+|---|---|---|
+| **What is traced at all** | Each camera key says which groups it can see (`g`); the shader skips the rest; a move traces the union of its two keys | The cheapest pixel is the test never run. Verified, not assumed: `__cine.cull()` compares the authored groups with everything, pixel by pixel |
+| **What gives way, in what order** | Resolution down to its floor; then the quality step (`uLow`: fewer cloud octaves, no quay reflection); then, only while moving, 30 fps | Spend where the eye is. The step removes decoration and never the beat's hero or event; each world decides what its step drops |
+
 Safety rails:
 - **Floors.** `minScale` is `[0.35, 0.5, 0.5]` for move / event / rest. Below ~0.5 edges stair-step;
   motion hides it, stillness does not. At the move floor, if frames still overrun, moving frames drop to
@@ -43,7 +50,11 @@ Estimated GPU busy %, from the calibrated cost × pixels shaded per second. Load
 | Event | 37-38 % | 23 % | −39 % | 0.52-0.62 → 0.56-0.73: sharper |
 | Moving | 37-38 % | 26-27 % | −29 % | 0.52-0.62 → 0.42-0.56: softer, in motion |
 
-(Two independent runs; the spread is the calibration's run-to-run noise.)
+(Two independent runs; the spread is the calibration's run-to-run noise.) A third run a day later,
+with this GPU measuring heavier (~7 ms/Mpx under the same burn, against 4.5-5: the same machine varies
+by session), gave rest −49 % (and sharper), event −23 %, moving −20 %. Event and moving sat at the
+scale floor with the quality step on, and the estimate does not credit the step's own saving, so those
+two are conservative.
 
 The template as shipped is far cheaper than any real world (~0.07 ms for the whole 5 MP frame on this
 GPU), so there the saving is in pixels shaded per second: rest 297 → 98 Mpx/s (−67 %), events −50 %,
@@ -52,6 +63,27 @@ moving unchanged (a fast GPU affords full resolution; the governor never goes ab
 Caveats, stated plainly: one machine, one browser; GPU load is *estimated* from the calibrated slope,
 not measured per frame; a real thermal or battery effect was not observed. Run the bench on the
 hardware that matters (below) before quoting a number.
+
+### Groups and the quality step, measured
+
+At full scale on the same GPU (median of many frames; the placeholder is near the limit of what can be
+timed here):
+
+| Shot | Everything traced | Shot's groups | + quality step |
+|---|---|---|---|
+| 1 (skyline; the quay set culled) | 0.0140 ms | 0.0149 | 0.0152 |
+| 3 (close-up; the city culled) | 0.0142 | 0.0115 (−19 %) | 0.0096 (−32 %) |
+| 4 (the decision; the city culled) | 0.0141 | 0.0118 (−16 %) | 0.0113 (−20 %) |
+
+Culling five boxes and a few glows (shot 1) is lost in the noise; culling eight towers is not. The
+saving grows with what a world can hide: an interior that hides a whole city is worth far more.
+
+### The tail, not the mean
+
+A per-shot calibration done in one go measured 144-169 ms of frozen page under load: three dropped
+frames the first time the camera rested on each shot. Spread over idle frames, one ~2 ms draw each,
+never on the frame after a paint, the steps measured 1.7-10.5 ms. Averages hid it; a worst-frame gate
+found it. `stats().frames` reports p50 / p95 / p99 / worst; judge those.
 
 ## Verify it: `?bench`
 

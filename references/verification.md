@@ -34,7 +34,16 @@ __cine.slope();             // ms per Mpx, measured now (run it a few times: the
 __cine.lag(90, 40);         // feed the overrun detector fake slow frames (tests moveFloorFps)
 __cine.grid();              // a coarse picture of the next full paint, to compare two builds of one shot
 __cine.noUpscaler();        // rehearse the no-offscreen-target fallback
+__cine.cull();              // at the current shot: pixels that change without SET / CITY, and with the shot's own groups
+__cine.loseContext(600);    // lose the WebGL context, restore it 600 ms later
 ```
+
+`stats()` also returns `frames` (p50 / p95 / p99 / worst frame interval and frames over 50 ms, real
+frames only), `calibrationSteps` (ms each per-shot calibration step blocked the page), `boot` (first
+text, scene ready, scene on screen, ms since navigation) and `qualityStep`.
+
+The manual harness runs on its own clock. A background pane also throttles timers and, it seems, the
+GPU: timings taken there (stalls, frame tails) are not what a visitor gets. Take those in a visible tab.
 
 Screenshots in a hidden pane may lag one step. Tick 1–2 more frames and take a throwaway screenshot
 before the one you keep. `?debug` also disables the opening push and CSS transitions.
@@ -65,7 +74,18 @@ before the one you keep. `?debug` also disables the opening push and CSS transit
     Then open `?bench&burn=N` with N chosen so the full canvas costs 15-30 ms, and compare Stock engine
     with Governed (or press Run A/B tour, tab in front). Look at the picture at the rest scale and at the
     move floor: edges should not stair-step at rest. Report the numbers *and the machine*.
-12. **Sound.** No `AudioContext` exists before the click. Each cue fires once; the ambience follows
+12. **Culling.** At every integer beat, at `i + 0.5` and through each event, `__cine.cull()` must report
+    `asAuthored.visible` 0. Then look at the `SET`/`CITY` numbers: a group with `visible` 0 at a shot is
+    a saving you have not taken yet.
+13. **The tail.** In a visible tab, under a load that makes the full canvas cost 15-30 ms, scroll the whole
+    story and read `stats().frames`: p95 within about 1.5× the paint interval for the pace, worst under
+    ~50 ms, and no calibration step over ~12 ms. A mean that looks fine with a bad p99 is a hitch.
+14. **Sustained.** Three minutes on a real phone, resting and scrolling: phones throttle when warm.
+    Compare the first and last minute's p95.
+15. **Context loss.** `__cine.loseContext()`: text and the painted backdrop stay, the scene fades back,
+    `cull()` afterwards still reports `asAuthored.visible` 0.
+16. **Boot.** `stats().boot`: the text must be readable well before the scene is ready; record both.
+17. **Sound.** No `AudioContext` exists before the click. Each cue fires once; the ambience follows
     its rule and fades when the stage scrolls away. If a real device isn't available, run the paths
     against an `OfflineAudioContext`, and say that it was not heard.
 

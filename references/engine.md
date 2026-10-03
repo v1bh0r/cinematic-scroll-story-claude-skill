@@ -12,7 +12,9 @@ cpT ─▶ critically damped spring ─▶ cp (the camera's beat position; every
 cp  ─▶ camAt(cp): interpolate keys K[i]→K[i+1] (linear / quad via / cubic via+via2 / tvia for target)
      + push-in on arrival (S.rest) + opening push (S.open) + breathing ─▶ camera p, t, fov
 cp, clocks S ─▶ uniforms ─▶ one fragment shader draws the world
+cp ─▶ groups g (union of the two keys mid-move) ─▶ uGrp: what the shader traces at all
 cp, S, scroll ─▶ pace(): move | event | rest ─▶ how often to paint, and what fraction of the canvas to fill
+     ─▶ at the scale floor and still over budget: the quality step (uLow), then 30 fps while moving
      ─▶ drawScene into an off-screen texture ─▶ upscale pass (bilinear + sharpen) ─▶ canvas
 cp ─▶ beat opacity (words arrive with the shot) ─▶ active beat ─▶ callouts projected from 3-D
 ```
@@ -43,6 +45,9 @@ cp ─▶ beat opacity (words arrive with the shot) ─▶ active beat ─▶ ca
 | GPU and fans busy while nothing moves | The loop drew every display frame at one resolution, whether the camera moved or not | `pace()`: every frame while moving, 30 fps for a clock event, 20 fps at rest. The world still steps every frame, so callouts stay glued |
 | Sharpness pops when the resolution changes | Resizing the canvas reallocates it | The canvas keeps one size; the scene is drawn into an off-screen texture at a smoothly varying `scale` and stretched up. Shrinks fast, grows slowly |
 | A clock event plays choppy | Its clock is not in `evBusy`, so it runs at the rest rate | Add every clock to the `evBusy` expression in `step()` |
+| A hitch the first time the camera rests on a shot | The per-shot calibration ran in one go (~150 ms under load) | `calStep()`: one ~2 ms draw per idle frame, never on the frame after a paint; check `stats().calibrationSteps` |
+| An object vanishes, or a reflection loses something, after culling | A group was switched off for a shot (or a move) that can see it | Set `g` per key only from `__cine.cull()` (`asAuthored` visible 0), at the shot, mid-move and through its events. Glows have long tails: they count as visible |
+| The page goes blank after a GPU reset | The lost-context handler gave up | `webglcontextrestored` rebuilds programs and targets, re-calibrates, fades back in; the text and backdrop stay meanwhile |
 | Governor collapses to the minimum scale | A control loop on GPU timer queries (a floor of several ms in Chrome on Metal) or on live ms-per-pixel (fixed overhead grows per pixel as the scene shrinks) | Open loop on a measured *slope*. See `performance.md`, "What was tried" |
 | First frame stalls ~250 ms, the page pops | The driver finishes compiling on the first draw | `KHR_parallel_shader_compile`, polled with `setTimeout` (rAF pauses in hidden tabs); first draw on a 64×40 canvas; fade in afterwards |
 | Scroll stops between two shots and shows nothing | Scroll can rest anywhere | `settle()`: after 180 ms still (240 ms after touch), glide to the shot you were heading for |
@@ -67,7 +72,7 @@ cp ─▶ beat opacity (words arrive with the shot) ─▶ active beat ─▶ ca
 
 ## Performance budget
 
-Read `references/performance.md`: the paint governor (pace, scale, calibration), its `Q` knobs, the
+Read `references/performance.md`: the paint governor (pace, scale, calibration, groups, the quality step), its `Q` knobs, the
 measured savings, what was tried and rejected, and what to change in the world if it is still too heavy.
 In short: budgets are per state (`moveMs` 4, `eventMs` 7, `restMs` 10 of GPU time per painted frame),
 resolution follows them between a floor and the full canvas, and an idle shot is painted at 20 fps.

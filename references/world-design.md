@@ -53,6 +53,22 @@ Avoid organic detail up close (faces, foliage, fabric). Frame such things from a
 with light and silhouette. Budget about 30 primitives per ray after AABB culling. Group arrays behind
 one bounding-box test.
 
+**The cheapest convincing form.** Before tracing something, ask whether it needs to be geometry. In
+rising order of cost: words in the HTML; a colour or gradient in the sky function (a far ridge, a
+haze band); an analytic glow (a lamp, a beam); a single box or sphere; an array walked cell by cell;
+anything reflected. A skyline 300 units away is a silhouette, not a city.
+
+**Visibility is architecture.** Divide the world into a few groups (the template has `SET` and
+`CITY`) and compose shots so that some groups fall out of frame: an interior hides the outside, a
+building in front hides what is behind it, a high angle hides the ground set. Each camera key then
+says which groups it can see (`g`), the shader skips the rest, and `__cine.cull()` proves the frame is
+unchanged. In the placeholder, dropping the city at the two close-up shots saves ~18 % per frame; in
+a world with hundreds of primitives behind the hall wall it is the largest saving available.
+
+**Phones are their own composition.** Not a scaled-down desktop: shorter camera travel between
+shots, smaller parallax, fewer layers of transparency, the subject higher in the frame because the
+text takes the bottom. Use `pm`/`tm` framings, and shorten `via` detours on portrait.
+
 ## Palette and type
 
 - The near-black canvas plus the brand's **one** accent works for UI. The sky and world can carry

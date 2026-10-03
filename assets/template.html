@@ -208,13 +208,18 @@ main p{color:var(--dim); line-height:1.6; max-width:38em}
   // lights l. Optional: pm/tm a portrait framing; via (quadratic) or via+via2 (cubic) bend the
   // move INTO this key; tvia bends where the camera looks on the way. lens:1 = the hero shot,
   // framed so the subject's top lands just under the hero text (see lens()).
+  // Groups: what each shot can see. A group a shot cannot see is not traced at all (attention as
+  // architecture: the cheapest pixel is the test you never run). g on a key = the groups visible AT that
+  // shot; a move between two shots traces the union. Verify every value with __cine.cull() (section 9):
+  // removing a group the shot can see changes pixels, and the check says how many.
+  var G_SET = 1, G_CITY = 2, G_ALL = 3;
   var K = [
     { p: [0, 5, 92],    t: [0, 5.4, 0],     f: 32, n: 0.00, l: 1.0, lens: 1 },   // hero: the building across the water
-    { p: [-14, 22, 48], t: [10, 30, -300],  f: 36, n: 0.10, l: 1.0 },            // the problem: the skyline
+    { p: [-14, 22, 48], t: [10, 30, -300],  f: 36, n: 0.10, l: 1.0, g: G_CITY }, // the problem: the skyline (the quay's set is out of frame)
     { p: [-21, 4.2, 21], t: [-12, 1.4, 7],  f: 44, n: 0.18, l: 1.0,              // 01 station one, right of the text
       pm: [-16, 5, 24], tm: [-12, 0, 7] },                                         //    portrait: above the text
-    { p: [-7, 4.4, 21], t: [1, 1.4, 6],     f: 44, n: 0.24, l: 1.0 },            // 02 station two
-    { p: [3, 3.8, 18],  t: [12, 2.6, 3],    f: 44, n: 0.30, l: 1.0,              // 03 the decision at the booth
+    { p: [-7, 4.4, 21], t: [1, 1.4, 6],     f: 44, n: 0.24, l: 1.0, g: G_SET },  // 02 station two (the building hides the city)
+    { p: [3, 3.8, 18],  t: [12, 2.6, 3],    f: 44, n: 0.30, l: 1.0, g: G_SET,    // 03 the decision at the booth
       pm: [8, 3.4, 20], tm: [12, 1.2, 3] },
     { p: [6, 11, 62],   t: [2, 5, -6],      f: 40, n: 0.62, l: 1.0,              // lights out
       via: [30, 6, 34] },
@@ -255,6 +260,7 @@ main p{color:var(--dim); line-height:1.6; max-width:38em}
   function camParam(u) { var i = Math.floor(u); return i >= NB - 1 ? NB - 1 : i + ease(clamp((u - i - 0.45) / 0.55, 0, 1)); }
   // A beat's words arrive with its shot and leave with it: tied to the camera, not the scroll.
   function beatOpacity(i, c) { return 1 - sm(0.1, 0.34, Math.abs(c - i)); }
+  function grp(k) { return k.g == null ? G_ALL : k.g; }
   function camAt(cp) {
     var i = Math.min(Math.floor(cp), NB - 2), f = cp - i, g = 1 - f, A = K[i], B = K[i + 1];
     var ap = kp(A), bp = kp(B), at = kt(A), bt = kt(B);
@@ -265,6 +271,7 @@ main p{color:var(--dim); line-height:1.6; max-width:38em}
       p: B.via2 ? cubic(ap, B.via, B.via2, bp) : B.via ? quad(ap, B.via, bp) : [mix(ap[0], bp[0], f), mix(ap[1], bp[1], fy), mix(ap[2], bp[2], f)],
       t: B.tvia ? quad(at, B.tvia, bt) : [mix(at[0], bt[0], f), mix(at[1], bt[1], f), mix(at[2], bt[2], f)],
       f: mix(A.f, B.f, f), n: mix(A.n, B.n, f), l: mix(A.l, B.l, f),
+      g: f < 1e-3 ? grp(A) : f > 1 - 1e-3 ? grp(B) : grp(A) | grp(B),
       s: mix(A.lens ? heroShiftS : 0, B.lens ? heroShiftS : 0, f)
     };
   }
@@ -289,6 +296,8 @@ uniform vec2 uRes;
 ${BURN_DECL}
 uniform float uTime,uTanH,uShift,uNight,uLights,uOff,uCity,uOutage,uHold;
 uniform vec3 uPos,uTgt,uSt;
+uniform int uGrp;     // which groups this shot can see (G_* in section 1); the rest are not traced at all
+uniform float uLow;   // 1: the quality step is on (decorative detail drops before the frame rate does)
 const vec3 ACC=vec3(.045,.38,.88);
 const vec3 WARM=vec3(1.,.6,.3);
 vec3 gSun;
@@ -300,7 +309,7 @@ const int OUT=${OUT};
 float h21(vec2 p){vec3 q=fract(vec3(p.xyx)*.1031);q+=dot(q,q.yzx+33.33);return fract((q.x+q.y)*q.z);}
 float vn(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);
   return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y);}
-float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*vn(p);p=p*2.03+vec2(13.7,5.1);a*=.5;}return s;}
+float fbm(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){if(uLow>.5&&i>=2)break;s+=a*vn(p);p=p*2.03+vec2(13.7,5.1);a*=.5;}return s;}   // quality step: two octaves
 float rebuilt(int i){return clamp((uCity*1.25-TURN[i])/.3,0.,1.);}
 float decided(){return exp(-pow((uHold-.62)*14.,2.));}      // the moment the person decides
 vec3 heldAt(){
@@ -349,10 +358,12 @@ Hit trace(vec3 ro,vec3 rd){
   bx(ro,ird,vec3(0.,.2,2.),vec3(46.,.6,20.),1,0.,H);         // the quay, top at y=.8
   bx(ro,ird,vec3(0.,4.8,-6.),vec3(20.,4.,6.),2,0.,H);        // the building, front face at z=0
   bx(ro,ird,vec3(0.,8.95,-6.),vec3(20.6,.15,6.6),3,0.,H);    // its roof
-  bx(ro,ird,vec3(12.,2.3,-.2),vec3(1.7,1.1,.25),5,0.,H);     // the booth: a window with a person behind it
-  for(int i=0;i<3;i++) bx(ro,ird,vec3(-12.+12.*float(i),1.3,8.),vec3(1.1,.5,1.1),4,float(i),H);   // stations
-  if(uHold>0.) bx(ro,ird,heldAt(),vec3(.35),7,0.,H);         // the change waiting for a person
-  for(int i=0;i<NT;i++){
+  if((uGrp&1)!=0){                                            // group SET: what stands on the quay
+    bx(ro,ird,vec3(12.,2.3,-.2),vec3(1.7,1.1,.25),5,0.,H);     // the booth: a window with a person behind it
+    for(int i=0;i<3;i++) bx(ro,ird,vec3(-12.+12.*float(i),1.3,8.),vec3(1.1,.5,1.1),4,float(i),H);   // stations
+    if(uHold>0.) bx(ro,ird,heldAt(),vec3(.35),7,0.,H);       // the change waiting for a person
+  }
+  if((uGrp&2)!=0) for(int i=0;i<NT;i++){                      // group CITY: the skyline across the water
     float r=rebuilt(i), h=mix(TW[i].z,TW[i].z*1.35,r), w=mix(TW[i].w,TW[i].w*.8,r);
     bx(ro,ird,vec3(TW[i].x,h*.5,TW[i].y),vec3(w,h*.5,w),6,float(i),H);
   }
@@ -373,7 +384,7 @@ vec3 shade(vec3 ro,vec3 rd,Hit H,out float k,out vec3 rn){
   vec3 amb=mix(vec3(.26,.3,.42),vec3(.05,.06,.1),uNight)*(.55+.45*max(n.y,0.));
   vec2 ce;
   if(H.m==1){                                                  // quay: wet, with a guide line
-    alb=vec3(.06); k=n.y>.5?.22:0.;
+    alb=vec3(.06); k=n.y>.5&&uLow<.5?.22:0.;                 // quality step: the quay stops reflecting; the lake never does
     em+=ACC*1.4*(1.-smoothstep(0.,.07,abs(p.z-12.)))*step(.5,n.y);
   } else if(H.m==2){                                           // the building: lit because people are in it
     alb=vec3(.09,.1,.12);
@@ -408,6 +419,7 @@ vec3 shade(vec3 ro,vec3 rd,Hit H,out float k,out vec3 rn){
 }
 vec3 glows(vec3 ro,vec3 rd,float tmax){
   vec3 g=vec3(0.);
+  if((uGrp&1)==0) return g;                                   // every glow here belongs to the SET
   for(int i=0;i<3;i++){
     vec3 P=vec3(-12.+12.*float(i),2.5,8.);
     float f=i==0?uSt.x:i==1?uSt.y:uSt.z;
@@ -459,7 +471,7 @@ void main(){
   fragColor=vec4(col,1.);
 }`;
   var VS = '#version 300 es\nin vec2 a;void main(){gl_Position=vec4(a,0.,1.);}';
-  var UNI = ['uRes', 'uTime', 'uTanH', 'uShift', 'uNight', 'uLights', 'uOff', 'uCity', 'uOutage', 'uHold', 'uPos', 'uTgt', 'uSt', 'uBurn'];
+  var UNI = ['uRes', 'uTime', 'uTanH', 'uShift', 'uNight', 'uLights', 'uOff', 'uCity', 'uOutage', 'uHold', 'uPos', 'uTgt', 'uSt', 'uBurn', 'uGrp', 'uLow'];
   // The upscaler: the scene is drawn small into a texture, this pass stretches it to the canvas
   // (bilinear, with a touch of sharpening that grows as the scale drops).
   var PFS = `#version 300 es
@@ -501,15 +513,18 @@ void main(){
     sharpen: 0.35,                // upscaler sharpening at full strength (it fades out as the scale nears 1)
     adapt: true,                  // false: always draw at the canvas size
     fixed: 0,                     // 0..1: pin the scene to this fraction of the canvas (for measuring); 0 = governed
-    budget: 1                     // multiplier on all three budgets
+    budget: 1,                    // multiplier on all three budgets
+    lod: true,                    // allow the quality step (uLow) before dropping the frame rate; 'force' = always on (measuring)
+    groups: null                  // a number overrides every shot's groups (for cull checks); null = the shots decide
   };
   if (navigator.connection && navigator.connection.saveData) Q.budget = 0.6;
-  var gl = null, prog = null, fsh = null, U = {}, ready = false, pcExt = null, px1 = new Uint8Array(4);
+  var gl = null, prog = null, fsh = null, U = {}, ready = false, pcExt = null, px1 = new Uint8Array(4), lost = 0;
+  var tBoot = { text: performance.now(), ready: 0, shown: 0 };   // ms since navigation: text live / scene ready / first frame on screen
   var pprog = null, PU = {}, tex = null, fbo = null, noFbo = false;
   function fail() { sec.classList.add('nogl'); cv.style.display = 'none'; gl = null; ready = false; }
   try { gl = cv.getContext('webgl2', { antialias: false, alpha: false, depth: false, stencil: false, powerPreference: 'high-performance' }); }
   catch (e) { gl = null; }
-  if (gl) {
+  function build() {   // the programs, on the current context (and again after the context is restored)
     pcExt = gl.getExtension('KHR_parallel_shader_compile');
     var mk = function (type, src) { var s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
     var vsh = mk(gl.VERTEX_SHADER, VS); fsh = mk(gl.FRAGMENT_SHADER, FS);
@@ -517,7 +532,17 @@ void main(){
     gl.bindAttribLocation(prog, 0, 'a'); gl.linkProgram(prog);
     pprog = gl.createProgram(); gl.attachShader(pprog, vsh); gl.attachShader(pprog, mk(gl.FRAGMENT_SHADER, PFS));
     gl.bindAttribLocation(pprog, 0, 'a'); gl.linkProgram(pprog);
-    cv.addEventListener('webglcontextlost', function (e) { e.preventDefault(); fail(); });
+  }
+  if (gl) {
+    build();
+    // A lost context (GPU reset, driver update, too many tabs) is not a failure: the painted backdrop and the
+    // text carry on, and the scene comes back when the browser restores the context.
+    cv.addEventListener('webglcontextlost', function (e) {
+      e.preventDefault(); ready = false; shown = false; lost++; sec.classList.add('nogl'); cv.classList.remove('on');
+    });
+    cv.addEventListener('webglcontextrestored', function () {
+      sec.classList.remove('nogl'); tex = null; fbo = null; noFbo = false; resetGov(); cv.width = 1; cv.height = 1; build(); start();
+    });
   } else fail();
   function whenCompiled(cb) {   // setTimeout, not rAF: a hidden tab or pane pauses rAF
     if (!pcExt) { cb(); return; }
@@ -680,6 +705,7 @@ void main(){
       var oe = 1 - S.open, ow = oe * oe * (3 - 2 * oe) * (1 - sm(0, 0.6, cp));
       var bk = norm([c.p[0] - c.t[0], c.p[1] - c.t[1], c.p[2] - c.t[2]]);
       c.p[0] += bk[0] * 40 * ow; c.p[1] += 1.8 * ow; c.p[2] += bk[2] * 40 * ow;
+      c.g = G_ALL;   // pulled far back, the camera can see everything
     }
     var time = reduce ? frozenT : (now - t0) / 1000;
     if (!reduce) {   // the camera breathes a little, as if held
@@ -700,7 +726,11 @@ void main(){
   //               again the first time the camera rests on each shot, because shots differ in cost. The timing
   //               draws go into the off-screen target, so the visible frame is never touched.
   //   how DEAR  — if the display itself falls behind (under ~40 fps while every frame is drawn) the estimate is
-  //               raised (kSlow) and the scale follows; once the scale is at its floor, moving frames drop to 30 fps.
+  //               raised (kSlow) and the scale follows.
+  // When the scale is at its floor and the frame is still over budget, quality gives way in a fixed order, the
+  // hero last: (1) scale, down to its floor; (2) the quality step (uLow: decorative detail — fewer cloud octaves,
+  // no quay reflection — while the lake, the subject and the event stay whole); (3) only then, moving frames
+  // drop to 30 fps. Each world decides what its quality step removes; it must never touch the beat's hero.
   // GPU timer queries were tried for this and rejected: in Chrome on Metal each timed frame costs the driver a stall
   // and the result has a floor of several ms, which drives any closed loop straight to the minimum scale.
   function drawScene(w, h) {   // the world, into whatever framebuffer is bound, w×h pixels
@@ -714,10 +744,21 @@ void main(){
     gl.uniform3f(U.uPos, c.p[0], c.p[1], c.p[2]); gl.uniform3f(U.uTgt, c.t[0], c.t[1], c.t[2]);
     gl.uniform3f(U.uSt, st(2), st(3), st(4));
     gl.uniform1f(U.uBurn, burn);
+    gl.uniform1i(U.uGrp, Q.groups != null ? Q.groups : c.g); gl.uniform1f(U.uLow, lowNow ? 1 : 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
   var scaleCur = 1, lastPaint = 0, pState = 2, lastRW = 0, lastRH = 0, ovl = false, restSince = 0, moveAt = 0,
+      lowQ = [false, false, false], lowMove = false, lowNow = false, ft = [], calStall = 0, calSteps = [],
       slopeAt = [], acc = { f: 0, px: 0, ms: 0, t: 0 }, rate = { fps: 0, mpx: 0, busy: 0 }, tot = { f: 0, px: 0, ms: 0 };
+  function frameDist() {   // the frame intervals the visitor got: the tail is what they feel, not the mean
+    if (!ft.length) return null;
+    var a = ft.slice().sort(function (x, y) { return x - y; }), at = function (q) { return +a[Math.min(a.length - 1, Math.floor(q * a.length))].toFixed(1); };
+    return { n: a.length, p50: at(0.5), p95: at(0.95), p99: at(0.99), worst: +a[a.length - 1].toFixed(1), over50ms: a.filter(function (x) { return x > 50; }).length };
+  }
+  function bootTimes() {
+    var fcp = performance.getEntriesByName && performance.getEntriesByName('first-contentful-paint')[0];
+    return { firstText: fcp ? Math.round(fcp.startTime) : Math.round(tBoot.text), sceneReady: Math.round(tBoot.ready), sceneShown: Math.round(tBoot.shown) };
+  }
   function pace(now) {   // 0 the camera moves · 1 a clock event plays · 2 at rest
     if (reduce) return 2;
     if (touching || now - lastScroll < 240 || Math.abs(cpV) > 0.012 || Math.abs(cpS - cpTgt) > 0.004 || S.open < 1) return 0;
@@ -730,11 +771,15 @@ void main(){
     var any = n ? sum / n : msPerPx, a = Math.floor(cp), b = Math.min(NB - 1, a + 1);
     return mix(slopeAt[a] > 0 ? slopeAt[a] : any, slopeAt[b] > 0 ? slopeAt[b] : any, cp - a);
   }
+  function rawScale(st) {   // what the budget affords before the floor is applied (below the floor means: over budget)
+    var per = costAt(cpS) * kSlow * cv.width * cv.height;
+    return per > 0 ? Math.sqrt(budgetOf(st) / per) : 1;
+  }
   function modelScale(st) {   // the fraction of the canvas this state can afford
     var per = costAt(cpS) * kSlow * cv.width * cv.height;
     return per > 0 ? clamp(Math.sqrt(budgetOf(st) / per), Q.minScale[st], 1) : 1;
   }
-  function resetGov() { slopeAt = []; kSlow = 1; slow = []; ovl = false; }
+  function resetGov() { slopeAt = []; kSlow = 1; slow = []; ovl = false; cal = null; calStall = 0; calSteps = []; }
   function measureSlope(inFbo) {   // ms per pixel of the scene as the camera sees it now; draws small, off-screen, and syncs
     var cw = cv.width, ch = cv.height, asp = cw / ch;
     // Sizes are chosen so the big batch takes a few ms: on a fast GPU a tiny batch is all noise, on a slow one a big
@@ -757,24 +802,55 @@ void main(){
     var ratio = Math.max(hi.ms, 0.02) / hi.px;   // ms ÷ pixels can only overstate the slope (the fixed cost is in it), so it caps it
     return slope > 0 ? Math.min(slope, ratio) : ratio;
   }
-  function shotSlope() {   // one timing per shot, with a second opinion if it looks off from the shots already known
-    var a = measureSlope(true), n = 0, sum = 0, i;
-    for (i = 0; i < NB; i++) if (slopeAt[i] > 0) { n++; sum += slopeAt[i]; }
-    if (n) {
-      var m = sum / n;
-      if (a > 1.8 * m || a < m / 1.8) { var b = measureSlope(true); if (Math.abs(Math.log(b / m)) < Math.abs(Math.log(a / m))) a = b; }
+  // Per-shot calibration, spread out: one small timing step per idle frame, and only on an idle frame that does
+  // not follow a paint (at 20 fps on 60 Hz: paint, idle, STEP). Done in one go it froze the page ~150 ms under load.
+  var cal = null;
+  function calSizes() {   // the big batch is sized to ~2 ms of GPU work: a step must fit in an idle frame on any machine
+    var cw = cv.width, ch = cv.height, asp = cw / ch, hiPx = clamp(msPerPx > 0 ? 2 / msPerPx : 0.4e6, 0.08e6, Math.min(1.5e6, cw * ch));
+    var dim = function (n) { var tw = Math.max(32, Math.min(cw, Math.round(Math.sqrt(n * asp)))); return [tw, Math.max(20, Math.min(ch, Math.round(tw / asp)))]; };
+    return [dim(hiPx / 4), dim(hiPx)];
+  }
+  function calStep(k) {   // one draw per step: warm-up, three timed (small), warm-up, three timed (big). True while in progress.
+    if (!cal || cal.k !== k) cal = { k: k, i: 0, d: calSizes(), ms: [1e9, 1e9], retry: false, first: 0 };
+    var size = cal.i < 4 ? 0 : 1, d = cal.d[size], warm = cal.i === 0 || cal.i === 4, t0 = performance.now();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo); gl.viewport(0, 0, d[0], d[1]);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);           // drain (the GPU should already be idle)
+    var s0 = performance.now(); drawScene(d[0], d[1]); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
+    if (!warm) cal.ms[size] = Math.min(cal.ms[size], performance.now() - s0);   // best of three: contention only adds time
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    var st = performance.now() - t0; calStall = Math.max(calStall, st); calSteps.push(+st.toFixed(1)); if (calSteps.length > 60) calSteps.shift();
+    if (++cal.i < 8) return true;
+    // Both sizes carry the same fixed round trip, so it cancels in the slope; ms ÷ pixels can only overstate it.
+    var pl = cal.d[0][0] * cal.d[0][1], ph = cal.d[1][0] * cal.d[1][1], ratio = Math.max(cal.ms[1], 0.02) / ph;
+    var sl = (cal.ms[1] - cal.ms[0]) / (ph - pl); sl = sl > 0 ? Math.min(sl, ratio) : ratio;
+    var n = 0, sum = 0; for (var i = 0; i < NB; i++) if (slopeAt[i] > 0) { n++; sum += slopeAt[i]; }
+    var m = n ? sum / n : msPerPx;   // with no other shot known yet, the start-up calibration is the reference
+    if (m && (sl > 1.8 * m || sl < m / 1.8)) {   // looks off from what is already known: a second opinion
+      if (!cal.retry) { cal = { k: k, i: 0, d: cal.d, ms: [1e9, 1e9], retry: true, first: sl }; return true; }
+      if (Math.abs(Math.log(cal.first / m)) < Math.abs(Math.log(sl / m))) sl = cal.first;
     }
-    return a;
+    slopeAt[k] = sl; cal = null; return false;
   }
   function overrun(ms) {   // the display's own verdict: called for every frame that is drawn while the camera moves
     slow.push(ms); if (slow.length > 90) slow.shift();
     if (slow.length < 90) return;
     var q = slow.slice().sort(function (a, b) { return a - b; })[45];
-    if (q > 26) { if (modelScale(0) <= Q.minScale[0] + 0.01) ovl = true; else kSlow = Math.min(kSlow * 1.3, 4); slow = []; }
+    if (q > 26) {
+      if (modelScale(0) > Q.minScale[0] + 0.01) kSlow = Math.min(kSlow * 1.3, 4);   // (1) the scale still has room
+      else if (Q.lod && !lowQ[0] && !lowMove) lowMove = true;                      // (2) the quality step
+      else ovl = true;                                                             // (3) the frame rate
+      slow = [];
+    }
     else if (q < 18 && kSlow > 1) { kSlow = Math.max(1, kSlow / 1.06); slow = []; }
   }
   function paint(st, dt) {
     var cw = cv.width, ch = cv.height;
+    if (Q.lod === 'force') lowQ[st] = true;     // for measuring what the step saves
+    else if (Q.lod && Q.adapt && !(Q.fixed > 0)) {   // the quality step, with hysteresis so it does not flicker on and off
+      var raw = rawScale(st), fl = Q.minScale[st];
+      if (raw < fl * 0.95) lowQ[st] = true; else if (raw > fl * 1.1) lowQ[st] = false;
+    } else lowQ[st] = false;
+    lowNow = lowQ[st] || (st === 0 && lowMove && Q.lod);
     var tgt = Q.fixed > 0 ? Q.fixed : Q.adapt ? modelScale(st) : 1;
     if (tgt > 0.97) tgt = 1;
     if (Math.abs(tgt - scaleCur) < 0.03 && tgt < 1) tgt = scaleCur;   // dead-band: small wobbles do not move the picture
@@ -841,20 +917,23 @@ void main(){
 
   function frame(now) {
     raf = 0;
+    // Frame intervals as the visitor gets them, for the distribution (p95, p99, worst), not just the mean.
+    if (last && !manual && visible && !document.hidden && now - last < 1000) { ft.push(now - last); if (ft.length > 600) ft.shift(); }
     var dt = last ? clamp((now - last) / 1000, 0, 0.1) : 1 / 60; last = now;
     var r = sec.getBoundingClientRect(), sy = scrollY, span = r.height - innerHeight;   // read first, then write
     var u = span > 0 ? clamp(-r.top / span, 0, 1) * (NB - 1 + TAIL) : 0;
     nowMs = now;
     step(u, dt, now);
     var pst = pace(now);
-    if (pst === 0) moveAt = now; else if (ovl && now - moveAt > 1500) { ovl = false; slow = []; }
+    if (pst === 0) moveAt = now; else if ((ovl || lowMove) && now - moveAt > 1500) { ovl = false; lowMove = false; slow = []; }
     if (pst !== 2) restSince = now;
     if (ready) {   // the world is stepped every frame (cheap); it is only DRAWN when its rate says so
       var half = pst === 0 && ovl && Q.moveFloorFps > 0;
       var gap = 1000 / (half ? Q.moveFloorFps : pst === 1 ? Q.eventFps : Q.restFps) - 2.5;   // a little under one period: vsync jitter must not skip a frame
+      var painted = false;
       if (reduce || forceDue || !shown || (pst === 0 && !half) || now - lastPaint >= gap) {
-        paint(pst, lastPaint ? clamp((now - lastPaint) / 1000, 0, 0.1) : 1 / 60); lastPaint = now;
-        if (!shown) { shown = true; cv.classList.add('on'); }
+        paint(pst, lastPaint ? clamp((now - lastPaint) / 1000, 0, 0.1) : 1 / 60); lastPaint = now; painted = true;
+        if (!shown) { shown = true; cv.classList.add('on'); if (!tBoot.shown) tBoot.shown = performance.now(); }
       }
       if (now - acc.t >= 1000) {
         if (acc.t) rate = { fps: acc.f * 1000 / (now - acc.t), mpx: acc.px / 1e3 / (now - acc.t), busy: acc.ms / (now - acc.t) * 100 };
@@ -862,7 +941,9 @@ void main(){
       }
       // The first time the camera rests on a shot, time it (a few ms, off-screen): shots differ in cost, and the scale follows.
       var rk = Math.round(cam.cp);
-      if (pst === 2 && !noFbo && !reduce && now - restSince > 500 && Math.abs(cam.cp - rk) < 0.02 && !(slopeAt[rk] > 0)) slopeAt[rk] = shotSlope();
+      // ...and not on the frame straight after a paint: the GPU is still finishing it, and the drain would wait for it
+      if (pst === 2 && !painted && now - lastPaint > 25 && !noFbo && !reduce && now - restSince > 500 && Math.abs(cam.cp - rk) < 0.02 && !(slopeAt[rk] > 0)) calStep(rk);
+      else if (cal && (pst !== 2 || Math.abs(cam.cp - cal.k) > 0.02)) cal = null;   // left the shot: start over next time
     }
     hud(uS, cam.cp, r.bottom, sy);
     sound(cam.cp);
@@ -881,7 +962,8 @@ void main(){
   }
   addEventListener('scroll', function () {
     var y = scrollY; if (y !== lastY) { down = y > lastY; lastY = y; }
-    lastScroll = performance.now(); clearTimeout(settleT); settleT = setTimeout(settle, 180); kick();
+    lastScroll = manual ? fake : performance.now();   // the ?debug harness runs on its own clock
+    clearTimeout(settleT); settleT = setTimeout(settle, 180); kick();
   }, { passive: true });
   addEventListener('touchstart', function () { touching = true; }, { passive: true });
   addEventListener('touchend', function () { touching = false; clearTimeout(settleT); settleT = setTimeout(settle, 240); }, { passive: true });
@@ -981,8 +1063,30 @@ void main(){
         var per = cam ? costAt(cam.cp) * kSlow : 0;
         return { state: ['move', 'event', 'rest'][pState], paintsPerSec: +rate.fps.toFixed(1), shadedMpxPerSec: +rate.mpx.toFixed(1),
                  estGpuBusyPct: +rate.busy.toFixed(1), estMsPerFrame: +(lastRW * lastRH * per).toFixed(2), msPerMpx: +(per * 1e6).toFixed(2),
-                 scale: +scaleCur.toFixed(3), kSlow: +kSlow.toFixed(2), overload: ovl, upscaler: !noFbo,
+                 scale: +scaleCur.toFixed(3), kSlow: +kSlow.toFixed(2), overload: ovl, qualityStep: lowNow, upscaler: !noFbo,
+                 frames: frameDist(), calibrationStallMs: +calStall.toFixed(1), calibrationSteps: calSteps.slice(), boot: bootTimes(), contextLosses: lost,
                  slopes: slopeAt.map(function (x) { return x > 0 ? +(x * 1e6).toFixed(2) : null; }) };
+      },
+      cull: function () {   // what changes if each group is removed from the CURRENT shot: visible 0 means it may be culled here
+        var cw = cv.width, ch = cv.height, a = new Uint8Array(cw * ch * 4), b = new Uint8Array(cw * ch * 4), out = {}, sv = [Q.groups, Q.fixed, Q.lod];
+        var shot = function (g, buf) { Q.groups = g; Q.fixed = 1; Q.lod = false; scaleCur = 1; paint(2, 0.1); gl.readPixels(0, 0, cw, ch, gl.RGBA, gl.UNSIGNED_BYTE, buf); };
+        var shotG = cam ? cam.g : G_ALL;
+        shot(G_ALL, a);
+        [['SET', G_ALL & ~G_SET], ['CITY', G_ALL & ~G_CITY], ['asAuthored', shotG]].forEach(function (e) {
+          shot(e[1], b); var n = 0, seen = 0, mx = 0;
+          for (var i = 0; i < a.length; i += 4) {
+            var d = Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]));
+            if (d) n++; if (d > 2) seen++; if (d > mx) mx = d;
+          }
+          // changed: any difference at all · visible: more than 2 levels (the dither is ±2) · max: the worst pixel
+          out[e[0]] = { changed: n, visible: seen, max: mx };
+        });
+        Q.groups = sv[0]; Q.fixed = sv[1]; Q.lod = sv[2];
+        return { cp: cam && +cam.cp.toFixed(3), shotGroups: shotG, changedPixelsWithout: out };   // asAuthored: the shot's own groups vs everything: must be ~0
+      },
+      loseContext: function (ms) {   // rehearse a GPU reset: lose the context, restore it after ms
+        var x = gl.getExtension('WEBGL_lose_context'); if (!x) return 'no WEBGL_lose_context';
+        x.loseContext(); setTimeout(function () { x.restoreContext(); }, ms || 500); return 'lost';
       },
       totals: function () { return { frames: tot.f, px: tot.px, estMs: tot.ms }; },   // cumulative: diff two reads for a window
       grid: function (nx, ny) {   // a coarse picture of the next full-size paint (rgb means), to compare two builds of the same shot
@@ -1004,14 +1108,13 @@ void main(){
       gpu: function (n) {   // ms per frame through the whole paint path at the current governed scale (one sync at the end)
         if (!ready) return null; n = n || 20; paint(pState, 0.033); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
         var s0 = performance.now(); for (var i = 0; i < n; i++) paint(pState, 0.033); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1);
-        return +((performance.now() - s0) / n).toFixed(2);
+        return +((performance.now() - s0) / n).toFixed(4);
       }
     };
   }
 
   // ── 10. start: the text is live at once; the scene joins when it is ready ──
-  measure(); kick();
-  if (gl) whenCompiled(function () {
+  function start() { if (gl) whenCompiled(function () {
     if (!gl || !linked()) return;
     fontsReady(function () {
       measure(); step(scrollU(), 0, performance.now());
@@ -1024,11 +1127,12 @@ void main(){
         scaleCur = 0.5; paint(0, 0); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px1); scaleCur = 1;
       }
       tot.f = 0; tot.px = 0; tot.ms = 0; acc.f = 0; acc.px = 0; acc.ms = 0; acc.t = 0;
-      ready = true;
-      if (!reduce && scrollY < 10 && !DEBUG) S.open = 0;   // the opening push, only when the page opens at the top
+      ready = true; if (!tBoot.ready) tBoot.ready = performance.now();
+      if (!reduce && scrollY < 10 && !DEBUG && !lost) S.open = 0;   // the opening push, only when the page opens at the top
       last = 0; kick();
     });
-  });
+  }); }
+  measure(); kick(); start();
 
   // ── 11. bench (only with ?bench): live cost readout, a synthetic load, and a scripted A/B ──
   // Open page.html?bench. Compares the stock engine's behaviour (full rate, one fixed resolution) with the
@@ -1069,22 +1173,24 @@ void main(){
         'scene    ' + (lastRW * lastRH / 1e6).toFixed(2) + ' of ' + (cv.width * cv.height / 1e6).toFixed(2) + ' Mpx  (×' + scaleCur.toFixed(2) + ')\n' +
         'shaded   ' + rate.mpx.toFixed(0) + ' Mpx/s\n' +
         'est. GPU ' + (lastRW * lastRH * costAt(cpS) * kSlow).toFixed(1) + ' ms/frame · busy ' + rate.busy.toFixed(0) + '%  (from the calibrated cost)\n' +
+        'frames   ' + (function (d) { return d ? 'p50 ' + d.p50 + ' · p95 ' + d.p95 + ' · worst ' + d.worst + ' ms' : 'collecting'; })(frameDist()) + (lowNow ? '  · quality step' : '') + '\n' +
         'budgets  ' + [Q.moveMs, Q.eventMs, Q.restMs].map(function (x) { return (x * Q.budget).toFixed(0); }).join(' / ') + ' ms  (move / event / rest)';
     }, 250);
     var wait = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
     var tour = async function (name, dwell) {
-      setPreset(name); scrollTo(0, 0); await wait(1500);
+      setPreset(name); scrollTo(0, 0); await wait(1500); ft = [];
       var s = { mpx: 0, busy: 0, fps: 0, n: 0 };
       for (var i = 0; i < NB; i++) {
         scrollToBeat(i); await wait(1800);               // the move, and its settle
         for (var k = 0; k < dwell * 2; k++) { await wait(500); s.mpx += rate.mpx; s.busy += Math.max(0, rate.busy); s.fps += rate.fps; s.n++; }
       }
-      return { mpx: s.mpx / s.n, busy: s.busy / s.n, fps: s.fps / s.n };
+      var d = frameDist() || { p95: 0, worst: 0 };
+      return { mpx: s.mpx / s.n, busy: s.busy / s.n, fps: s.fps / s.n, p95: d.p95, worst: d.worst };
     };
     $('bt').addEventListener('click', async function () {
       var b = this; b.disabled = true; $('br').textContent = 'running… about ' + (2 * NB * (1.8 + 4) | 0) + ' s, keep this tab in front';
       var a = await tour('stock', 4), g = await tour('gov', 4);
-      var f = function (x) { return x.mpx.toFixed(0).padStart(5) + ' Mpx/s  ' + x.fps.toFixed(0).padStart(3) + ' fps  est. busy ' + x.busy.toFixed(0) + '%'; };
+      var f = function (x) { return x.mpx.toFixed(0).padStart(5) + ' Mpx/s  ' + x.fps.toFixed(0).padStart(3) + ' fps  est. busy ' + x.busy.toFixed(0) + '%  p95 ' + x.p95 + ' ms  worst ' + x.worst + ' ms'; };
       $('br').textContent = 'stock    ' + f(a) + '\ngoverned ' + f(g) + '\nsaving   ' + (100 * (1 - g.mpx / a.mpx)).toFixed(0) + '% fewer pixels shaded' +
         (a.busy > 0 ? ', ' + (100 * (1 - g.busy / a.busy)).toFixed(0) + '% less estimated GPU time' : '');
       b.disabled = false;

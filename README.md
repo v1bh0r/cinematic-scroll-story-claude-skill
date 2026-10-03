@@ -31,5 +31,8 @@ cd assets && python3 -m http.server 4410 --bind 127.0.0.1
 # open http://127.0.0.1:4410/template.html?bench&burn=1200 in a front tab
 ```
 
+Run the server from inside `assets/` (or from the repo root and open `/assets/template.html`).
 `burn` adds a synthetic per-pixel load; pick a value that makes your GPU take 15 to 30 ms for a full frame.
+Add `&debug` for the console harness: `__cine.stats()` (frame-time tail, boot timings), `__cine.cull()`
+(proves each shot only traces what it can see) and `__cine.loseContext()`.
 Measured savings (one machine, one browser, estimated GPU load) are in `references/performance.md`.

@@ -57,7 +57,7 @@ retheme it; design the world first, then build it.
    - the world;
    - the rule;
    - a beat sheet (one row per beat: shot, on-screen event, copy, callouts, what the viewer should
-     feel);
+     feel, the hero and what the shot cannot see, and its cost class; see `story-method.md`);
    - two or three alternative worlds in one line each.
 
    Wait for a pick or adjustments. This is the cheapest place to change direction.
@@ -77,6 +77,9 @@ retheme it; design the world first, then build it.
    - Check the moves between shots for clipping through geometry.
    - Check phone portrait, reduced motion, the no-WebGL fallback, console errors, and cost: open
      `?bench`, compare Stock with Governed under a load that makes the full canvas cost 15-30 ms.
+   - Run `__cine.cull()` at every shot and mid-move: each shot's groups must change no visible pixel.
+   - Judge the tail, not the mean: p95 and worst frame, and the calibration steps, from `stats()`.
+   - Lose and restore the context (`__cine.loseContext()`); run three minutes on a real phone.
    - Show the screenshots to the user; don't describe them.
 
 7. **Direct it** (second pass, when asked or before shipping). Review it as a film:
@@ -112,6 +115,10 @@ retheme it; design the world first, then build it.
     much of the canvas as its budget affords (4 / 7 / 10 ms per painted frame while moving / in an event /
     at rest). Keep that. If the world is still too heavy, cut the world, not the governor
     (`references/performance.md`).
+  - Trace only what the shot can see (`g` on each camera key), and verify it with `__cine.cull()`.
+  - Quality gives way in a fixed order, the hero last: resolution, then the quality step (decorative
+    detail), then frame rate. The quality step never touches the beat's hero or its event.
+  - A lost GPU context is not a failure: the text and backdrop stay, and the scene comes back.
   - Sound is opt-in, off on every visit, with no files.
 - **Camera discipline.**
   - It never passes through walls, never leaves a set mid-sequence without a motivated exit, and
